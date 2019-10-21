@@ -1,20 +1,17 @@
 //////////////////////////////////////////////////////////////////////////////////
-// Engineer:         Christian P. Feist
+// Developer:         F. Moll
 // 
-// Create Date:      17:54:27 05/04/2016 
-// Design Name:      /
-// Module Name:      trivium_top
-// Project Name:     Trivium
-// Target Devices:   Spartan-6, Zynq
-// Tool versions:    ISE 14.7, Vivado v2016.2
-// Description:      The top module of the Trivium core. It simply realizes
+// Create Date:      21 October 2019 
+// Module Name:      cipher_engine
+// Project Name:     Trivium-asic
+// Description:      The top module of the Trivium core. It realizes
 //                   a state machine that controls the cipher_engine component.
+//					 Serial input for Key and IV in sequence, LSB first.
 //
 // Dependencies:     /
 //
 // Revision: 
-// Revision 0.01 - File Created 
-// Revision 0.02 - Modified core for use with AXI-Lite protocol
+// Revision 0.01 - File Created
 //
 //////////////////////////////////////////////////////////////////////////////////
 `timescale 1ns / 1ps
@@ -62,12 +59,24 @@ cipher_engine cphr(
     .clk_i(clk_i),
     .n_rst_i(n_rst_i),
     .ce_i(cphr_en_r),
-    .ld_dat_i(ld_dat_i),
-    .ld_reg_a_i(ld_reg_a_i),
-    .ld_reg_b_i(ld_reg_b_i),
+    .key_dat_i(ld_dat_r),
+    .iv_dat_i(ld_dat_r),
+    .ld_init_i(ld_reg_a_i),
     .dat_i(dat_r[0]),
     .dat_o(bit_out_s)
 );
+
+input_sr #(
+        .REG_SZ(160)
+    ) 
+    key_iv(
+        .clk_i(clk_i),
+        .n_rst_i(n_rst_i),
+        .ce_i(ce_i),
+        .reg_in_i(reg_c_out_s),
+        .dat_o(reg_a_out_s)
+    );
+
 
 //////////////////////////////////////////////////////////////////////////////////
 // Initial register values

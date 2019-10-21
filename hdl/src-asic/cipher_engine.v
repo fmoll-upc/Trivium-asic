@@ -6,7 +6,7 @@
 // Project Name:     Trivium-asic
 // Description:      Adapted from the Trivium project by Christian P. Feist (https://github.com/FuzzyLogic/Trivium)
 //					 This component realizes the actual Trivium architecture. It
-//                   consists of three unique LFSR (see lfsr) that
+//                   consists of three unique shift regs (see trivium_sr) that
 //                   are combined to form the key stream generation logic.
 //                   This module can be interfaced to preload keys, IVs and input
 //                   plaintext bits to obtain the corresponding ciphertext bits.
@@ -27,9 +27,9 @@ module cipher_engine(
     input   wire            ce_i,       /* Chip enable */
     
     /* Data related signals */
-    input   wire    [31:0]  ld_dat_i,   /* External data */
-    input   wire    [2:0]   ld_reg_a_i, /* Load external value into A */
-    input   wire    [2:0]   ld_reg_b_i, /* Load external value into B */
+    input   wire    [79:0]  key_dat_i,   /* key (to reg A) */
+    input   wire    [79:0]  iv_dat_i,   /* IV (to reg B) */
+    input   wire    	    ld_init_i,  /* Load external value into A and B*/
     input   wire            dat_i,      /* Input bit */
     output  wire            dat_o       /* Output bit */
 );
@@ -48,7 +48,7 @@ wire    key_stream_s;   /* Key stream bit */
 //////////////////////////////////////////////////////////////////////////////////
 // Module instantiations
 //////////////////////////////////////////////////////////////////////////////////
-shift_reg #(
+trivium_sr #(
         .REG_SZ(93),
         .FEED_FWD_IDX(65),
         .FEED_BKWD_IDX(68)
@@ -57,14 +57,15 @@ shift_reg #(
         .clk_i(clk_i),
         .n_rst_i(n_rst_i),
         .ce_i(ce_i),
-        .ld_i(ld_reg_a_i),
-        .ld_dat_i(ld_dat_i),
+        .ld_i(ld_init_i),
+        .ld_dat_i({13'd0, key_dat_i}),
         .dat_i(reg_c_out_s),
         .dat_o(reg_a_out_s),
+        .z_i(z_c_s),
         .z_o(z_a_s)
     );
    
-shift_reg #(
+trivium_sr #(
         .REG_SZ(84),
         .FEED_FWD_IDX(68),
         .FEED_BKWD_IDX(77)
@@ -73,14 +74,15 @@ shift_reg #(
         .clk_i(clk_i),
         .n_rst_i(n_rst_i),
         .ce_i(ce_i),
-        .ld_i(ld_reg_b_i),
-        .ld_dat_i(ld_dat_i),
+        .ld_i(ld_init_i),
+        .ld_dat_i({4'd0, iv_dat_i}),
         .dat_i(reg_a_out_s),
         .dat_o(reg_b_out_s),
+        .z_i(z_a_s),
         .z_o(z_b_s)
     );
    
-shift_reg #(
+trivium_sr #(
         .REG_SZ(111),
         .FEED_FWD_IDX(65),
         .FEED_BKWD_IDX(86)
@@ -89,10 +91,11 @@ shift_reg #(
         .clk_i(clk_i),
         .n_rst_i(n_rst_i),
         .ce_i(ce_i),
-        .ld_i(ld_reg_b_i),    /* This is only necessary s.t. the reg will contain 1110000...00 */
-        .ld_dat_i(0),
+        .ld_i(ld_init_i),
+        .ld_dat_i({3'b111, 108'd0}),
         .dat_i(reg_b_out_s),
         .dat_o(reg_c_out_s),
+        .z_i(z_b_s),
         .z_o(z_c_s)
     );
    
