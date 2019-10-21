@@ -10,7 +10,7 @@ A Verilog implementation of the Trivium stream cipher. This repo is an evolution
 	
 
 ## 1. General Information
-+ This Verilog implementation of the Trivium stream cipher consists of:
++ This Verilog implementation of the Trivium stream cipher will consist of:
     - The core components
     - A testbench for simulation
     - A Python reference implementation for the generation of test vectors and possibly other scenarios
@@ -20,10 +20,10 @@ A Verilog implementation of the Trivium stream cipher. This repo is an evolution
 + The specification of Trivium can be found in [1]
 	
 ## 2. Current Status
-Work in progress. At this point, RTL files need to be adapted to ASIC specifications.
+Work in progress at very early stage. At this point, RTL files need to be adapted to ASIC specifications so there is nothing that still works.
     
-## 3. Synthesizing and Testing The Core
-Work in progress. 
+## 3. Synthesizing and Testing The Core (work in progress)
+This is essentially a wish list at this stage. 
 
 + Synthesis
     - All necessary code will be found in the hdl/src directory
