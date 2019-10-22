@@ -50,8 +50,8 @@ wire    key_stream_s;   /* Key stream bit */
 //////////////////////////////////////////////////////////////////////////////////
 trivium_sr #(
         .REG_SZ(93),
-        .FEED_FWD_IDX(65),
-        .FEED_BKWD_IDX(68)
+        .FEED_FWD_IDX(66),
+        .FEED_BKWD_IDX(69)
     ) 
     reg_a(
         .clk_i(clk_i),
@@ -67,8 +67,8 @@ trivium_sr #(
    
 trivium_sr #(
         .REG_SZ(84),
-        .FEED_FWD_IDX(68),
-        .FEED_BKWD_IDX(77)
+        .FEED_FWD_IDX(69),
+        .FEED_BKWD_IDX(78)
     ) 
     reg_b(
         .clk_i(clk_i),
@@ -84,8 +84,8 @@ trivium_sr #(
    
 trivium_sr #(
         .REG_SZ(111),
-        .FEED_FWD_IDX(65),
-        .FEED_BKWD_IDX(86)
+        .FEED_FWD_IDX(66),
+        .FEED_BKWD_IDX(87)
     ) 
     reg_c(
         .clk_i(clk_i),

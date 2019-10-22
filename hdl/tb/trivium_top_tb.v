@@ -1,26 +1,20 @@
-////////////////////////////////////////////////////////////////////////////////
-// Engineer:      Christian P. Feist
-//
-// Create Date:   16:33:45 05/05/2016
-// Design Name:   trivium_top
-// Module Name:   /home/chris/Documents/FPGA/Work/Trivium/hdl/tb/trivium_top_tb.v
-// Project Name:  Trivium
-// Target Device: Spartan-6, Zynq  
-// Tool versions: ISE 14.7, Vivado v2016.2
-// Description:   The module trivium_top is tested using reference I/O files. Each
+//////////////////////////////////////////////////////////////////////////////////
+// Developer:         F. Moll
+// 
+// Create Date:      22 October 2019 
+// Module Name:      trivium_top_tb
+// Project Name:     Trivium-asic
+// Description:      The module trivium_top is tested using reference I/O files. Each
 //                test incorporates the pre-loading with a new key and IV, as well
 //                as providing input words and checking the correctness of the
 //                encrypted output words.
 //
-// Verilog Test Fixture created by ISE for module: trivium_top
+// Dependencies:     /
 //
-// Dependencies:  /
-// 
-// Revision:
+// Revision: 
 // Revision 0.01 - File Created
-// Revision 0.02 - Modifications to accomodate new core interface
-// 
-////////////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////////////
 `timescale 1ns / 1ps
 module trivium_top_tb;
 

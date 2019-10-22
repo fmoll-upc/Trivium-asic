@@ -21,16 +21,14 @@ module trivium_top(
     /* Module inputs */
     input   wire            clk_i,      /* System clock */
     input   wire            n_rst_i,    /* Asynchronous active low reset */
-    input   wire    [31:0]  dat_i,      /* Cipher input data */
-    input   wire    [31:0]  ld_dat_i,   /* Key and IV data */
-    input   wire    [2:0]   ld_reg_a_i, /* Load value into reg_a */
-    input   wire    [2:0]   ld_reg_b_i, /* Load value into reg_b */   
+    input   wire    	    dat_i,      /* Serial input data (iv, key, cipher)*/
     input   wire            init_i,     /* Initialize the cipher */
+    input   wire            end_i,     /* End of data stream */
     input   wire            proc_i,     /* Process input using current instance */
 
     /* Module outputs */
-    output  reg     [31:0]  dat_o,      /* Current cipher output */
-    output  wire            busy_o      /* Busy flag */     
+//    output  wire            busy_o,      /* Busy flag */     
+    output  reg    		    dat_o      /* Serial cipher output */
 );
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -39,18 +37,23 @@ module trivium_top(
 reg     [2:0]   next_state_s;   /* Next state of the FSM */
 reg     [2:0]   cur_state_r;    /* Current state of the FSM */
 reg     [10:0]  cntr_r;         /* Counter for warm-up and input processing */
-reg             cphr_en_r;      /* Cipher enable flag */
-reg     [31:0]  dat_r;          /* Buffered version of dat_i */
-wire            bit_out_s;      /* Cipher output bit */
+reg     [7:0]  cntr_key_r;         /* Counter for input key and iv store */
+reg             cphr_en_r;      /* Cipher enable  */
+reg             ce_keyiv_r;      /* Input SR enable  */
+reg             ld_init_r;      /* Load cipher with key and iv */
+reg     [159:0]  initreg_r;          /* key & iv register */
+wire		[80:0]	key_dat_s;		/* key value */
+wire		[80:0]	iv_dat_s;		/* iv value */
 integer i;
 
 //////////////////////////////////////////////////////////////////////////////////
 // Local parameter definitions
 //////////////////////////////////////////////////////////////////////////////////
 parameter   IDLE_e = 0, 
-            WARMUP_e = 1, 
-            WAIT_PROC_e = 2, 
-            PROC_e = 3;
+            RECV_INI_e = 1, 
+            LOAD_KEYIV_e = 2, 
+            WARMUP_e = 3, 
+            PROC_e = 4;
 
 //////////////////////////////////////////////////////////////////////////////////
 // Module instantiations
@@ -59,12 +62,15 @@ cipher_engine cphr(
     .clk_i(clk_i),
     .n_rst_i(n_rst_i),
     .ce_i(cphr_en_r),
-    .key_dat_i(ld_dat_r),
-    .iv_dat_i(ld_dat_r),
-    .ld_init_i(ld_reg_a_i),
-    .dat_i(dat_r[0]),
-    .dat_o(bit_out_s)
+    .key_dat_i(key_dat_s),
+    .iv_dat_i(iv_dat_s),
+    .ld_init_i(ld_init_r),
+    .dat_i(dat_i),
+    .dat_o(dat_o)
 );
+
+key_dat_s <= initreg_r[159:80];
+iv_dat_s <= initreg_r[79:0];
 
 input_sr #(
         .REG_SZ(160)
@@ -72,21 +78,21 @@ input_sr #(
     key_iv(
         .clk_i(clk_i),
         .n_rst_i(n_rst_i),
-        .ce_i(ce_i),
-        .reg_in_i(reg_c_out_s),
-        .dat_o(reg_a_out_s)
+        .ce_i(ce_keyiv_r),
+        .reg_in_i(dat_i),
+        .dat_o(initreg_r)
     );
 
 
 //////////////////////////////////////////////////////////////////////////////////
-// Initial register values
+// Initial register values (non-synthesizable)
 //////////////////////////////////////////////////////////////////////////////////
-assign busy_o = cphr_en_r;
-initial begin
-    cur_state_r = IDLE_e;
-    cntr_r = 0;
-    cphr_en_r = 1'b0;
-end
+// assign busy_o = cphr_en_r;
+// initial begin
+//     cur_state_r = IDLE_e;
+//     cntr_r = 0;
+//     cphr_en_r = 1'b0;
+// end
 
 //////////////////////////////////////////////////////////////////////////////////
 // Next state logic of the FSM
@@ -99,26 +105,29 @@ always @(*) begin
                 next_state_s = WARMUP_e;
             else
                 next_state_s = IDLE_e;
-            
+        
+        RECV_INI_s:
+        	/* key and iv received in input SR key_iv */
+        	if(cntr_key_r == 159)
+        		next_state_s = LOAD_KEYIV_s;
+        	else
+        		next_state_s = RECV_INI_s;
+        		
+		LOAD_KEYIV_e:
+			/* load key and iv in cipher registers */
+			next_state_s = WARMUP_e;
+	            
         WARMUP_e:
             /* Warm up the cipher */
             if (cntr_r == 1151)
-                next_state_s = WAIT_PROC_e;
-            else
-                next_state_s = WARMUP_e;
-            
-        WAIT_PROC_e:
-            if (proc_i)         /* Calculation for current settings is being started */
                 next_state_s = PROC_e;
-            else if (init_i)    /* Warmup phase, probably for new key o */
-                next_state_s = WARMUP_e;
             else
-                next_state_s = WAIT_PROC_e;
-            
+                next_state_s = WARMUP_e;
+                        
         PROC_e:
-            /* Process all 32 input data bits */
-            if (cntr_r == 31)
-                next_state_s = WAIT_PROC_e;
+            /* Generate cipher stream */
+            if (end_i)
+                next_state_s = IDLE_e;
             else
                 next_state_s = PROC_e;
             
@@ -133,11 +142,12 @@ end
 always @(posedge clk_i or negedge n_rst_i) begin
     if (!n_rst_i) begin
         /* Reset registers driven here */
-        cntr_r <= 0;
         cur_state_r <= IDLE_e;
+        cntr_r <= 0;
+        cntr_key_r <= 0;
         cphr_en_r <= 1'b0;
-        dat_o <= 0;
-        dat_r <= 0;
+        ce_keyiv_r <= 1'b0;
+        ld_init_r <= 1'b0;
     end
     else begin
         /* State save logic */
@@ -146,46 +156,43 @@ always @(posedge clk_i or negedge n_rst_i) begin
         /* Output logic */
         case (cur_state_r)
             IDLE_e: begin
-                if (next_state_s == WARMUP_e) begin
-                    /* Enable cipher and initialize */
-                    cphr_en_r <= 1'b1;
-                end
+				cntr_r <= 0;
+				cntr_key_r <= 0;
+				cphr_en_r <= 1'b0;
+				ce_keyiv_r <= 1'b0;
+				ld_init_r <= 1'b0;
+            end
+         
+            RECV_INI_e: begin
+				cntr_r <= 0;
+				cntr_key_r <= cntr_key_r + 1;
+				cphr_en_r <= 1'b0;
+				ce_keyiv_r <= 1'b1;
+				ld_init_r <= 1'b0;
+            end
+         
+            LOAD_KEYIV_e: begin
+				cntr_r <= 0;
+				cntr_key_r <= 0;
+				cphr_en_r <= 1'b0;
+				ce_keyiv_r <= 1'b0;
+				ld_init_r <= 1'b1;
             end
          
             WARMUP_e: begin
-                if (next_state_s == WAIT_PROC_e) begin
-                    cntr_r <= 0;
-                    cphr_en_r <= 1'b0;
-                end
-                else begin
-                    /* Increment the warm-up phase counter */
-                    cntr_r <= cntr_r + 1;
-                end
+				cntr_r <= cntr_r + 1;
+				cntr_key_r <= 0;
+				cphr_en_r <= 1'b1;
+				ce_keyiv_r <= 1'b0;
+				ld_init_r <= 1'b0;
             end
-         
-            WAIT_PROC_e: begin
-                /* Wait until data to encrypt/decrypt is being presented */
-                if (next_state_s == PROC_e) begin
-                    cphr_en_r <= 1'b1;
-                    dat_r <= dat_i;
-                end
-                else if (next_state_s == WARMUP_e)
-                    cphr_en_r <= 1'b1;
-            end
-         
+                  
             PROC_e: begin
-                if (next_state_s == WAIT_PROC_e) begin
-                    cphr_en_r <= 1'b0;
-                    cntr_r <= 0;
-                end
-                else
-                    cntr_r <= cntr_r + 1;
-                    
-                /* Shift the input data register */
-                dat_r <= {1'b0, dat_r[31:1]};
-            
-                /* Shift the output bits into the output register */
-                dat_o <= {bit_out_s, dat_o[31:1]};
+				cntr_r <= 0;
+				cntr_key_r <= 0;
+				cphr_en_r <= 1'b1;
+				ce_keyiv_r <= 1'b0;
+				ld_init_r <= 1'b0;
             end
          
         endcase
