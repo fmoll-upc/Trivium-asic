@@ -228,23 +228,22 @@ endfunction
 /* Module inputs */
 reg             clk_i;
 reg             n_rst_i;
-reg     [31:0]  dat_i;
-reg     [31:0]  ld_dat_i;
-reg     [2:0]   ld_reg_a_i;
-reg     [2:0]   ld_reg_b_i;   
+reg     	    dat_i;
 reg             init_i;
-reg             proc_i;
+reg             end_i;
 
 /* Module outputs */
-wire    [31:0]  dat_o;
-wire            busy_o;     
+wire     		dat_o;
 
 /* Other signals */
 reg start_tests_s;      /* Flag indicating the start of the tests */
 reg     [95:0]  key_r;  /* Key used for encryption */
 reg     [95:0]  iv_r;   /* IV used for encryption */
+reg     [31:0]  dat_in_s;
+reg    [31:0]  dat_out_s;
 integer instr_v;        /* Current stimulus instruction index */
 integer dat_cntr_v;     /* Data counter variable */
+integer keyiv_cntr_v;     /* Key/IV counter variable */
 integer cur_test_v;     /* Index of current test */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -254,13 +253,9 @@ trivium_top uut(
     .clk_i(clk_i),
     .n_rst_i(n_rst_i),
     .dat_i(dat_i),
-    .ld_dat_i(ld_dat_i),
-    .ld_reg_a_i(ld_reg_a_i),
-    .ld_reg_b_i(ld_reg_b_i),   
     .init_i(init_i),    
-    .proc_i(proc_i),    
-    .dat_o(dat_o),
-    .busy_o(busy_o)     
+    .end_i(end_i),    
+    .dat_o(dat_o)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -270,17 +265,9 @@ initial begin
     /* Initialize Inputs */
     clk_i = 0;
     n_rst_i = 0;
-    dat_i = 0;
-    ld_dat_i = 0;
-    ld_reg_a_i = 0;
-    ld_reg_b_i = 0;   
-    init_i = 0;
-    proc_i = 0;
     
     /* Initialize other signals/variables */
     start_tests_s = 0;
-    instr_v = 0;
-    dat_cntr_v = 0;
     cur_test_v = 0;
     
     /* Wait 100 ns for global reset to finish */
@@ -302,24 +289,19 @@ end
 always @(posedge clk_i or negedge n_rst_i) begin
     if (!n_rst_i) begin
         /* Reset registers driven here */
-        dat_i <= 0;
-        ld_dat_i <= 0;
-        ld_reg_a_i <= 0;
-        ld_reg_b_i <= 0;   
+        dat_in_s <= 0;
+        dat_out_s <= 0;
         init_i <= 0;
-        proc_i <= 0;   
+        end_i <= 0;   
         instr_v <= 0;
         dat_cntr_v <= 0;
+        keyiv_cntr <= 0;
         key_r <= 0;
         iv_r <= 0;
     end
     else if (start_tests_s) begin
         case (instr_v)
-            0: begin    /* Instruction 0: Check if core is ready */
-                if (busy_o) begin
-                    $display("ERROR: Test (Core ready) failed!");
-                    $finish;
-                end
+            0: begin    /* Instruction 0: Obtain key & iv */
 
                 /* Get the current key and IV */
                 key_r[79:0] <= get_key_iv("trivium_ref_in.txt", "key", cur_test_v);
@@ -328,33 +310,31 @@ always @(posedge clk_i or negedge n_rst_i) begin
                 instr_v <= instr_v + 1;
             end
          
-            1: begin    /* Instruction 1: Write key to core */
-                /* Default value */
-                ld_reg_a_i <= 0;
+            1: begin    /* Instruction 1: Send key to core */
+            	dat_i <= key_r[0];
+                init_i <= 1;
                 
-                if (dat_cntr_v < 3) begin
-                    ld_reg_a_i[dat_cntr_v] <= 1'b1;
-                    ld_dat_i <= key_r[(dat_cntr_v*32)+:32];
-                    dat_cntr_v <= dat_cntr_v + 1;
+                if (keyiv_cntr_v!=79) begin
+                	key_r <= {0,key_r[79:1]};
+                    keyiv_cntr_v <= keyiv_cntr_v + 1;
                 end
                 else begin
-                   dat_cntr_v = 0;
+                   keyiv_cntr_v = 0;
                    instr_v <= instr_v + 1;
                 end
              end
          
-            2: begin    /* Instruction 2: Write IV to core */
-                /* Default value */
-                ld_reg_b_i <= 0;
-             
-                if (dat_cntr_v < 3) begin
-                    ld_reg_b_i[dat_cntr_v] <= 1'b1;
-                    ld_dat_i <= iv_r[(dat_cntr_v*32)+:32];
-                    dat_cntr_v <= dat_cntr_v + 1;
+            2: begin    /* Instruction 2: Send IV to core */
+            	dat_i <= iv_r[0];
+               // init_i <= 1;
+                
+                if (keyiv_cntr_v!=79) begin
+                	iv_r <= {0,iv_r[79:1]};
+                    keyiv_cntr_v <= keyiv_cntr_v + 1;
                 end
                 else begin
-                    dat_cntr_v <= 0;
-                    instr_v <= instr_v + 1;
+                   keyiv_cntr_v = 0;
+                   instr_v <= instr_v + 1;
                 end
             end
          
@@ -368,7 +348,8 @@ always @(posedge clk_i or negedge n_rst_i) begin
                 init_i <= 0;
                 if (!busy_o) begin
                     proc_i <= 1'b1;
-                    dat_i <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
+                    dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
+                    dat_i <= dat_in_s[0]
                     instr_v <= instr_v + 1;
                 end
             end
@@ -376,6 +357,8 @@ always @(posedge clk_i or negedge n_rst_i) begin
             5: begin    /* Instruction 5: Wait until device busy */
                 if (busy_o) begin
                     proc_i <= 0;
+                    dat_in_s <= {0, dat_in_s[31:1]}
+                	dat_out_s <= {dat_out_s[31:1], dat_o}
                     instr_v <= instr_v + 1;
                 end
             end

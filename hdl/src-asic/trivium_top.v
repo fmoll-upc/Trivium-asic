@@ -24,7 +24,6 @@ module trivium_top(
     input   wire    	    dat_i,      /* Serial input data (iv, key, cipher)*/
     input   wire            init_i,     /* Initialize the cipher */
     input   wire            end_i,     /* End of data stream */
-    input   wire            proc_i,     /* Process input using current instance */
 
     /* Module outputs */
 //    output  wire            busy_o,      /* Busy flag */     
@@ -42,8 +41,8 @@ reg             cphr_en_r;      /* Cipher enable  */
 reg             ce_keyiv_r;      /* Input SR enable  */
 reg             ld_init_r;      /* Load cipher with key and iv */
 reg     [159:0]  initreg_r;          /* key & iv register */
-wire		[80:0]	key_dat_s;		/* key value */
-wire		[80:0]	iv_dat_s;		/* iv value */
+wire		[79:0]	key_dat_s;		/* key value */
+wire		[79:0]	iv_dat_s;		/* iv value */
 integer i;
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -102,7 +101,7 @@ always @(*) begin
         IDLE_e:
             /* Wait until the user initializes the module */
             if (init_i)
-                next_state_s = WARMUP_e;
+                next_state_s = RECV_INI_e;
             else
                 next_state_s = IDLE_e;
         
