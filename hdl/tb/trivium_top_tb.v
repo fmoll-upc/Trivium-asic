@@ -234,15 +234,18 @@ reg             end_i;
 
 /* Module outputs */
 wire     		dat_o;
+wire			busy_o;
 
 /* Other signals */
 reg start_tests_s;      /* Flag indicating the start of the tests */
 reg     [95:0]  key_r;  /* Key used for encryption */
 reg     [95:0]  iv_r;   /* IV used for encryption */
-reg     [31:0]  dat_in_s;
-reg    [31:0]  dat_out_s;
+reg     [31:0]  dat_in_s; // Input 32-bit data stream
+reg    [31:0]  dat_out_s; // Output 32-bit data stream
+reg    [31:0]  dat_outref_s; // Output 32-bit reference data
 integer instr_v;        /* Current stimulus instruction index */
 integer dat_cntr_v;     /* Data counter variable */
+integer bitcntr_v;     /* Bit counter inside input data variable */
 integer keyiv_cntr_v;     /* Key/IV counter variable */
 integer cur_test_v;     /* Index of current test */
 
@@ -255,7 +258,8 @@ trivium_top uut(
     .dat_i(dat_i),
     .init_i(init_i),    
     .end_i(end_i),    
-    .dat_o(dat_o)
+    .dat_o(dat_o),
+    .busy_init_o(busy_o)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -335,63 +339,57 @@ always @(posedge clk_i or negedge n_rst_i) begin
                 else begin
                    keyiv_cntr_v = 0;
                    instr_v <= instr_v + 1;
+                   init_i <= 1'b1; // Start initilization
                 end
             end
          
             3: begin    /* Instruction 3: Initialize the cipher */
-                init_i <= 1'b1;
-                if (busy_o)
+                init_i <= 1'b0; // release init signal
+                if (!busy_o) begin// check busy signal in cipher
                     instr_v <= instr_v + 1;
+                    dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
+                    dat_outref_s <= get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v);
+                    dat_i <= dat_in_s[0];
+                    bitcntr_v <= 0;
+                end
             end
          
             4: begin    /* Instruction 4: Present a 32-bit value to encrypt */
-                init_i <= 0;
-                if (!busy_o) begin
-                    proc_i <= 1'b1;
-                    dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
-                    dat_i <= dat_in_s[0]
-                    instr_v <= instr_v + 1;
+                if (bitcntr_v != 31) begin // count 32 bits
+                    dat_in_s <= {0, dat_in_s[31:1]}
+                	dat_out_s <= {dat_out_s[31:1], dat_o}
+                    bitcontr_v <= bitcontr_v + 1;
+                else begin
+                	bitcontr_v <= 0;
+                    if (dat_out_s != dat_outref_s)
+                		instr_v <= 6; // Finish error state
+                	else begin
+	                	if (dat_cntr_v < get_num_words("trivium_ref_in.txt", dat_cntr_v, cur_test_v) - 1) begin
+    	                    dat_cntr_v <= dat_cntr_v + 1;
+		                    dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
+        		            dat_outref_s <= get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v);
+        	            end
+        	            else begin
+        	            	instr_v <= 7; //Check completion state
+        	            end
+                	end
                 end
             end
             
-            5: begin    /* Instruction 5: Wait until device busy */
-                if (busy_o) begin
-                    proc_i <= 0;
-                    dat_in_s <= {0, dat_in_s[31:1]}
-                	dat_out_s <= {dat_out_s[31:1], dat_o}
-                    instr_v <= instr_v + 1;
-                end
-            end
-         
-            6: begin    /* Instruction 6: Get ciphertext from device */
-                if (!busy_o) begin
-                   // Compare received ciphertext to reference
-                   if (dat_o != get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v)) begin
-                        $display("ERROR: Incorrect output in test %d, word %d!", cur_test_v, dat_cntr_v);
-                        $display("%04x != %04x, input = %04x", dat_o, get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v), get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v));
-                        $finish;
-                   end
-               
-                   // Check if there is more data to encrypt in current test
-                   if (dat_cntr_v < get_num_words("trivium_ref_in.txt", dat_cntr_v, cur_test_v) - 1) begin
-                        dat_cntr_v <= dat_cntr_v + 1;
-                        instr_v <= 4;
-                   end
-                   else begin
-                        dat_cntr_v <= 0;
-                        instr_v <= instr_v + 1;
-                   end
-                end
-            end
+            6: begin    /* Display error and finish */
+         		$display("ERROR: Incorrect output in test %d, word %d!", cur_test_v, dat_cntr_v);
+                $display("%04x != %04x, input = %04x", dat_out_s, dat_outref_s, get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v));
+                $finish;
+			end
          
             7: begin    /* Instruction 7: Check if all tests completed and decide what to do */
                 if (cur_test_v < get_num_tests("trivium_ref_in.txt") - 1) begin
                     cur_test_v <= cur_test_v + 1;
-                    instr_v <= 0;
+                    instr_v <= 0; // Obtain new key and iv and start over
                 end
                 else begin
                     cur_test_v <= 0;
-                    instr_v <= instr_v + 1;
+                    instr_v <= instr_v + 1; // Finish successfully state
                 end
             end
          

@@ -27,7 +27,8 @@ module trivium_top(
 
     /* Module outputs */
 //    output  wire            busy_o,      /* Busy flag */     
-    output  reg    		    dat_o      /* Serial cipher output */
+    output  reg    		    dat_o,      /* Serial cipher output */
+    output reg				busy_init_o //busy flag while initializing
 );
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -84,16 +85,6 @@ input_sr #(
 
 
 //////////////////////////////////////////////////////////////////////////////////
-// Initial register values (non-synthesizable)
-//////////////////////////////////////////////////////////////////////////////////
-// assign busy_o = cphr_en_r;
-// initial begin
-//     cur_state_r = IDLE_e;
-//     cntr_r = 0;
-//     cphr_en_r = 1'b0;
-// end
-
-//////////////////////////////////////////////////////////////////////////////////
 // Next state logic of the FSM
 //////////////////////////////////////////////////////////////////////////////////
 always @(*) begin
@@ -127,8 +118,6 @@ always @(*) begin
             /* Generate cipher stream */
             if (end_i)
                 next_state_s = IDLE_e;
-            else
-                next_state_s = PROC_e;
             
         default:
             next_state_s = cur_state_r;
@@ -147,6 +136,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
         cphr_en_r <= 1'b0;
         ce_keyiv_r <= 1'b0;
         ld_init_r <= 1'b0;
+        busy_init_o <= 1'b0;
     end
     else begin
         /* State save logic */
@@ -181,9 +171,10 @@ always @(posedge clk_i or negedge n_rst_i) begin
             WARMUP_e: begin
 				cntr_r <= cntr_r + 1;
 				cntr_key_r <= 0;
-				cphr_en_r <= 1'b1;
+				cphr_  en_r <= 1'b1;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
+				busy_init_o <= 1'b1;
             end
                   
             PROC_e: begin
@@ -192,6 +183,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
 				cphr_en_r <= 1'b1;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
+				busy_init_o <= 1'b0;
             end
          
         endcase
