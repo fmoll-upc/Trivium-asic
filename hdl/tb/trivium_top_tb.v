@@ -356,9 +356,10 @@ always @(posedge clk_i or negedge n_rst_i) begin
          
             4: begin    /* Instruction 4: Present a 32-bit value to encrypt */
                 if (bitcntr_v != 31) begin // count 32 bits
-                    dat_in_s <= {0, dat_in_s[31:1]}
-                	dat_out_s <= {dat_out_s[31:1], dat_o}
+                    dat_in_s <= {0, dat_in_s[31:1]};
+                	dat_out_s <= {dat_out_s[31:1], dat_o};
                     bitcontr_v <= bitcontr_v + 1;
+                end
                 else begin
                 	bitcontr_v <= 0;
                     if (dat_out_s != dat_outref_s)

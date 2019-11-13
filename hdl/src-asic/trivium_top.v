@@ -171,7 +171,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
             WARMUP_e: begin
 				cntr_r <= cntr_r + 1;
 				cntr_key_r <= 0;
-				cphr_  en_r <= 1'b1;
+				cphr_en_r <= 1'b1;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
 				busy_init_o <= 1'b1;

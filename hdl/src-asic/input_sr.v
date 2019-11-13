@@ -25,7 +25,7 @@ module input_sr #(
     input   wire            n_rst_i,    /* Asynchronous active low reset */
     input   wire            ce_i,       /* Chip enable */
 
-	input  wire             reg_in_i;   /* Serial input */
+	input  wire             reg_in_i,   /* Serial input */
 	output reg       		[(REG_SZ - 1):0]    dat_o;      /* Shift register output */
 );
 
