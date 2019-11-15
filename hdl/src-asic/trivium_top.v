@@ -27,8 +27,8 @@ module trivium_top(
 
     /* Module outputs */
 //    output  wire            busy_o,      /* Busy flag */     
-    output  reg    		    dat_o,      /* Serial cipher output */
-    output reg				busy_init_o //busy flag while initializing
+    output  wire   		    dat_o,      /* Serial cipher output */
+    output reg 			busy_init_o //busy flag while initializing
 );
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -41,7 +41,7 @@ reg     [7:0]  cntr_key_r;         /* Counter for input key and iv store */
 reg             cphr_en_r;      /* Cipher enable  */
 reg             ce_keyiv_r;      /* Input SR enable  */
 reg             ld_init_r;      /* Load cipher with key and iv */
-reg     [159:0]  initreg_r;          /* key & iv register */
+wire    [159:0]  initreg_s;          /* key & iv register */
 wire		[79:0]	key_dat_s;		/* key value */
 wire		[79:0]	iv_dat_s;		/* iv value */
 integer i;
@@ -53,7 +53,8 @@ parameter   IDLE_e = 0,
             RECV_INI_e = 1, 
             LOAD_KEYIV_e = 2, 
             WARMUP_e = 3, 
-            PROC_e = 4;
+            POSTWARMUP_e = 4, 
+            PROC_e = 5;
 
 //////////////////////////////////////////////////////////////////////////////////
 // Module instantiations
@@ -69,8 +70,8 @@ cipher_engine cphr(
     .dat_o(dat_o)
 );
 
-key_dat_s <= initreg_r[159:80];
-iv_dat_s <= initreg_r[79:0];
+assign key_dat_s = initreg_s[159:80];
+assign iv_dat_s = initreg_s[79:0];
 
 input_sr #(
         .REG_SZ(160)
@@ -80,7 +81,7 @@ input_sr #(
         .n_rst_i(n_rst_i),
         .ce_i(ce_keyiv_r),
         .reg_in_i(dat_i),
-        .dat_o(initreg_r)
+        .dat_o(initreg_s)
     );
 
 
@@ -96,12 +97,12 @@ always @(*) begin
             else
                 next_state_s = IDLE_e;
         
-        RECV_INI_s:
+        RECV_INI_e:
         	/* key and iv received in input SR key_iv */
         	if(cntr_key_r == 159)
-        		next_state_s = LOAD_KEYIV_s;
+        		next_state_s = LOAD_KEYIV_e;
         	else
-        		next_state_s = RECV_INI_s;
+        		next_state_s = RECV_INI_e;
         		
 		LOAD_KEYIV_e:
 			/* load key and iv in cipher registers */
@@ -110,9 +111,16 @@ always @(*) begin
         WARMUP_e:
             /* Warm up the cipher */
             if (cntr_r == 1151)
-                next_state_s = PROC_e;
+                next_state_s = POSTWARMUP_e;
             else
                 next_state_s = WARMUP_e;
+
+        POSTWARMUP_e:
+            /* Warm up the cipher */
+            if (init_i)
+                next_state_s = PROC_e;
+            else
+                next_state_s = POSTWARMUP_e;
                         
         PROC_e:
             /* Generate cipher stream */
@@ -131,55 +139,67 @@ always @(posedge clk_i or negedge n_rst_i) begin
     if (!n_rst_i) begin
         /* Reset registers driven here */
         cur_state_r <= IDLE_e;
-        cntr_r <= 0;
-        cntr_key_r <= 0;
-        cphr_en_r <= 1'b0;
-        ce_keyiv_r <= 1'b0;
-        ld_init_r <= 1'b0;
-        busy_init_o <= 1'b0;
+	cntr_key_r <= 0;
+	cntr_r <= 0;
     end
     else begin
         /* State save logic */
         cur_state_r <= next_state_s;
+	if(cur_state_r == WARMUP_e) begin
+		cntr_r <= cntr_r + 1;
+	end
+	else begin
+		cntr_r <= 0;
+	end
+	if(cur_state_r == RECV_INI_e) begin
+		cntr_key_r <= cntr_key_r + 1;
+	end
+	else begin
+		cntr_key_r <= 0;
+	end
+    end
+end
+
       
-        /* Output logic */
+        /* Output logic combinational*/
+    always@(*) begin
         case (cur_state_r)
             IDLE_e: begin
-				cntr_r <= 0;
-				cntr_key_r <= 0;
 				cphr_en_r <= 1'b0;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
+        			busy_init_o <= 1'b0;
             end
          
             RECV_INI_e: begin
-				cntr_r <= 0;
-				cntr_key_r <= cntr_key_r + 1;
 				cphr_en_r <= 1'b0;
 				ce_keyiv_r <= 1'b1;
 				ld_init_r <= 1'b0;
+				busy_init_o <= 1'b0;
             end
          
             LOAD_KEYIV_e: begin
-				cntr_r <= 0;
-				cntr_key_r <= 0;
 				cphr_en_r <= 1'b0;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b1;
+				busy_init_o <= 1'b1;
             end
          
             WARMUP_e: begin
-				cntr_r <= cntr_r + 1;
-				cntr_key_r <= 0;
 				cphr_en_r <= 1'b1;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
 				busy_init_o <= 1'b1;
             end
                   
+            POSTWARMUP_e: begin
+				cphr_en_r <= 1'b0;
+				ce_keyiv_r <= 1'b0;
+				ld_init_r <= 1'b0;
+				busy_init_o <= 1'b0;
+            end
+                  
             PROC_e: begin
-				cntr_r <= 0;
-				cntr_key_r <= 0;
 				cphr_en_r <= 1'b1;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
@@ -188,6 +208,5 @@ always @(posedge clk_i or negedge n_rst_i) begin
          
         endcase
     end
-end
 
 endmodule

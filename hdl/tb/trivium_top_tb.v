@@ -15,7 +15,7 @@
 // Revision 0.01 - File Created
 //
 //////////////////////////////////////////////////////////////////////////////////
-`timescale 1ns / 1ps
+`timescale 1ns / 100ps
 module trivium_top_tb;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -228,7 +228,7 @@ endfunction
 /* Module inputs */
 reg             clk_i;
 reg             n_rst_i;
-reg     	    dat_i;
+wire    	    dat_i;
 reg             init_i;
 reg             end_i;
 
@@ -236,10 +236,12 @@ reg             end_i;
 wire     		dat_o;
 wire			busy_o;
 
+parameter GETKEY=0, WAIT1=1, SENDIV=2, SENDKEY=3, WAIT_INIT=4, SEND_DAT=5, CHECK_FINISH=6, KAPUTT=7, HAPPY=8, WAIT2=9;
+
 /* Other signals */
 reg start_tests_s;      /* Flag indicating the start of the tests */
-reg     [95:0]  key_r;  /* Key used for encryption */
-reg     [95:0]  iv_r;   /* IV used for encryption */
+reg     [79:0]  key_r;  /* Key used for encryption */
+reg     [79:0]  iv_r;   /* IV used for encryption */
 reg     [31:0]  dat_in_s; // Input 32-bit data stream
 reg    [31:0]  dat_out_s; // Output 32-bit data stream
 reg    [31:0]  dat_outref_s; // Output 32-bit reference data
@@ -287,6 +289,8 @@ always begin
     #10 clk_i = ~clk_i;
 end
 
+assign dat_i = (instr_v==SENDIV) ? iv_r[0] : ((instr_v==SENDKEY) ? key_r[0] : dat_in_s[0]);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Stimulus process
 ////////////////////////////////////////////////////////////////////////////////
@@ -299,74 +303,82 @@ always @(posedge clk_i or negedge n_rst_i) begin
         end_i <= 0;   
         instr_v <= 0;
         dat_cntr_v <= 0;
-        keyiv_cntr <= 0;
+        keyiv_cntr_v <= 0;
         key_r <= 0;
         iv_r <= 0;
     end
     else if (start_tests_s) begin
         case (instr_v)
-            0: begin    /* Instruction 0: Obtain key & iv */
+            GETKEY: begin    /* Instruction 0: Obtain key & iv */
 
                 /* Get the current key and IV */
                 key_r[79:0] <= get_key_iv("trivium_ref_in.txt", "key", cur_test_v);
                 iv_r[79:0] <= get_key_iv("trivium_ref_in.txt", "iv", cur_test_v);
 
-                instr_v <= instr_v + 1;
+                instr_v <= WAIT1; // Wait for cipher_engine 1 cycle
+                init_i <= 1;
+            end
+	    WAIT1: begin // Instruction 1: Cipher engine needs one cycle to wake-up
+                instr_v <= SENDIV;
             end
          
-            1: begin    /* Instruction 1: Send key to core */
-            	dat_i <= key_r[0];
-                init_i <= 1;
+            SENDIV: begin    /* Instruction 2: Send iv to core */
                 
                 if (keyiv_cntr_v!=79) begin
-                	key_r <= {0,key_r[79:1]};
+                	iv_r <= {1'b0,iv_r[79:1]};
                     keyiv_cntr_v <= keyiv_cntr_v + 1;
                 end
                 else begin
                    keyiv_cntr_v = 0;
-                   instr_v <= instr_v + 1;
+                   instr_v <= SENDKEY;
                 end
              end
          
-            2: begin    /* Instruction 2: Send IV to core */
-            	dat_i <= iv_r[0];
+            SENDKEY: begin    /* Instruction 3: Send key to core */
                // init_i <= 1;
                 
                 if (keyiv_cntr_v!=79) begin
-                	iv_r <= {0,iv_r[79:1]};
+                	key_r <= {1'b0,key_r[79:1]};
                     keyiv_cntr_v <= keyiv_cntr_v + 1;
                 end
                 else begin
                    keyiv_cntr_v = 0;
-                   instr_v <= instr_v + 1;
+                   instr_v <= WAIT_INIT;
                    init_i <= 1'b1; // Start initilization
+                   $display("Start Init");
                 end
             end
          
-            3: begin    /* Instruction 3: Initialize the cipher */
+            WAIT_INIT: begin    /* Instruction 4: Initialize the cipher */
                 init_i <= 1'b0; // release init signal
                 if (!busy_o) begin// check busy signal in cipher
-                    instr_v <= instr_v + 1;
+                    instr_v <= SEND_DAT;
                     dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
                     dat_outref_s <= get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v);
-                    dat_i <= dat_in_s[0];
                     bitcntr_v <= 0;
                 end
             end
+
+	    /*WAIT2: begin // Instruction 9: wait one cycle before shifting
+		instr_v <= SEND_DAT;
+                	dat_out_s <= {dat_o, dat_out_s[31:1]};
+	    end */
          
-            4: begin    /* Instruction 4: Present a 32-bit value to encrypt */
-                if (bitcntr_v != 31) begin // count 32 bits
-                    dat_in_s <= {0, dat_in_s[31:1]};
-                	dat_out_s <= {dat_out_s[31:1], dat_o};
-                    bitcontr_v <= bitcontr_v + 1;
+            SEND_DAT: begin    /* Instruction 5: Present a 32-bit value to encrypt */
+			init_i <= 1'b1;
+		if (init_i) begin
+                	if (bitcntr_v != 32 ) begin // count 32 bits
+                    dat_in_s <= {1'b0, dat_in_s[31:1]};
+                	dat_out_s <= {dat_o, dat_out_s[31:1]};
+                    bitcntr_v <= bitcntr_v + 1;
                 end
                 else begin
-                	bitcontr_v <= 0;
+                	bitcntr_v <= 0;
                     if (dat_out_s != dat_outref_s)
-                		instr_v <= 6; // Finish error state
+                		instr_v <= KAPUTT; // Finish error state
                 	else begin
 	                	if (dat_cntr_v < get_num_words("trivium_ref_in.txt", dat_cntr_v, cur_test_v) - 1) begin
-    	                    dat_cntr_v <= dat_cntr_v + 1;
+    	                    dat_cntr_v <= CHECK_FINISH;
 		                    dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
         		            dat_outref_s <= get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v);
         	            end
@@ -375,27 +387,33 @@ always @(posedge clk_i or negedge n_rst_i) begin
         	            end
                 	end
                 end
+		end
             end
             
-            6: begin    /* Display error and finish */
+            KAPUTT: begin    /* Instruction 6: Display error and finish */
          		$display("ERROR: Incorrect output in test %d, word %d!", cur_test_v, dat_cntr_v);
                 $display("%04x != %04x, input = %04x", dat_out_s, dat_outref_s, get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v));
                 $finish;
 			end
          
-            7: begin    /* Instruction 7: Check if all tests completed and decide what to do */
+            CHECK_FINISH: begin    /* Instruction 7: Check if all tests completed and decide what to do */
                 if (cur_test_v < get_num_tests("trivium_ref_in.txt") - 1) begin
                     cur_test_v <= cur_test_v + 1;
-                    instr_v <= 0; // Obtain new key and iv and start over
+                    instr_v <= GETKEY; // Obtain new key and iv and start over
                 end
                 else begin
                     cur_test_v <= 0;
-                    instr_v <= instr_v + 1; // Finish successfully state
+                    instr_v <= HAPPY; // Finish successfully state
                 end
             end
          
-            default: begin
+            HAPPY: begin // Instruction 8: successful completion
                 $display("Tests successfully completed!");
+                $finish;
+            end
+         
+            default: begin
+                $display("Something weird happened :-(");
                 $finish;
             end
         endcase

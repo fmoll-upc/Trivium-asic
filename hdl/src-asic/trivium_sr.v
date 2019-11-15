@@ -66,7 +66,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
             dat_r <= {dat_r[(REG_SZ - 2):0], reg_in_s};
         end
         else if (ld_i != 0) begin /* Load external values into register */
-            dat_r[(REG_SZ - 1)-:0] <= ld_dat_i;
+            dat_r[(REG_SZ - 1):0] <= ld_dat_i;
         end
     end
 end

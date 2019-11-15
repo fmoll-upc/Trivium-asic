@@ -26,7 +26,7 @@ module input_sr #(
     input   wire            ce_i,       /* Chip enable */
 
 	input  wire             reg_in_i,   /* Serial input */
-	output reg       		[(REG_SZ - 1):0]    dat_o;      /* Shift register output */
+	output wire      		[(REG_SZ - 1):0]    dat_o      /* Shift register output */
 );
 
 reg       		[(REG_SZ - 1):0]    dat_r;      /* Shift register output */
@@ -40,11 +40,11 @@ always @(posedge clk_i or negedge n_rst_i) begin
     else begin
         if (ce_i) begin
             /* Shift contents of register */
-            dat_r <= {dat_r[(REG_SZ - 2):0], reg_in_i};
+            dat_r <= {reg_in_i, dat_r[(REG_SZ - 1):1]};
         end
     end
 end
 
-assign dat_o <= dat_r;
+assign dat_o = dat_r;
 
 endmodule
