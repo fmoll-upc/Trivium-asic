@@ -53,6 +53,7 @@ wire                        reg_in_s;   /* Shift register input (feedback value)
 // Feedback calculation
 //////////////////////////////////////////////////////////////////////////////////
 assign reg_in_s = dat_i ^ dat_r[(FEED_BKWD_IDX-1)] ^ z_i; /* Added z_i, missing in original project */
+//assign reg_in_s = dat_i ^ dat_r[(FEED_BKWD_IDX-1)] ; 
 
 //////////////////////////////////////////////////////////////////////////////////
 // Shift register process
@@ -75,6 +76,7 @@ end
 // Output calculations
 //////////////////////////////////////////////////////////////////////////////////
 assign z_o = (dat_r[REG_SZ - 1] ^ dat_r[FEED_FWD_IDX-1]);
-assign dat_o = (dat_r[REG_SZ - 2] & dat_r[REG_SZ - 3]); /* Modified from original */
+assign dat_o = (dat_r[REG_SZ - 2] & dat_r[REG_SZ - 3]) ; /* Modified from original */
+//assign dat_o = z_o ^ (dat_r[REG_SZ - 2] & dat_r[REG_SZ - 3]) ; 
 
 endmodule

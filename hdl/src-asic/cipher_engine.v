@@ -37,9 +37,9 @@ module cipher_engine(
 //////////////////////////////////////////////////////////////////////////////////
 // Signal definitions
 //////////////////////////////////////////////////////////////////////////////////
-wire    reg_a_out_s;    /* reg_a output */
-wire    reg_b_out_s;    /* reg_b output */
-wire    reg_c_out_s;    /* reg_c output */
+wire    d_a_out_s;    /* reg_a output */
+wire    d_b_out_s;    /* reg_b output */
+wire    d_c_out_s;    /* reg_c output */
 wire    z_a_s;          /* Partial key stream output from reg_a */
 wire    z_b_s;          /* Partial key stream output from reg_b */
 wire    z_c_s;          /* Partial key stream output from reg_c */
@@ -59,8 +59,8 @@ trivium_sr #(
         .ce_i(ce_i),
         .ld_i(ld_init_i),
         .ld_dat_i({13'd0, key_dat_i}),
-        .dat_i(reg_c_out_s),
-        .dat_o(reg_a_out_s),
+        .dat_i(d_c_out_s),
+        .dat_o(d_a_out_s),
         .z_i(z_c_s),
         .z_o(z_a_s)
     );
@@ -76,8 +76,8 @@ trivium_sr #(
         .ce_i(ce_i),
         .ld_i(ld_init_i),
         .ld_dat_i({4'd0, iv_dat_i}),
-        .dat_i(reg_a_out_s),
-        .dat_o(reg_b_out_s),
+        .dat_i(d_a_out_s),
+        .dat_o(d_b_out_s),
         .z_i(z_a_s),
         .z_o(z_b_s)
     );
@@ -93,8 +93,8 @@ trivium_sr #(
         .ce_i(ce_i),
         .ld_i(ld_init_i),
         .ld_dat_i({3'b111, 108'd0}),
-        .dat_i(reg_b_out_s),
-        .dat_o(reg_c_out_s),
+        .dat_i(d_b_out_s),
+        .dat_o(d_c_out_s),
         .z_i(z_b_s),
         .z_o(z_c_s)
     );

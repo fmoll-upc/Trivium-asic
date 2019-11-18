@@ -230,6 +230,7 @@ reg             clk_i;
 reg             n_rst_i;
 wire    	    dat_i;
 reg             init_i;
+reg             inutil_flag;
 reg             end_i;
 
 /* Module outputs */
@@ -245,6 +246,7 @@ reg     [79:0]  iv_r;   /* IV used for encryption */
 reg     [31:0]  dat_in_s; // Input 32-bit data stream
 reg    [31:0]  dat_out_s; // Output 32-bit data stream
 reg    [31:0]  dat_outref_s; // Output 32-bit reference data
+//reg    [31:0]  dat_intest_s; // Input 32-bit reference data
 integer instr_v;        /* Current stimulus instruction index */
 integer dat_cntr_v;     /* Data counter variable */
 integer bitcntr_v;     /* Bit counter inside input data variable */
@@ -289,7 +291,10 @@ always begin
     #10 clk_i = ~clk_i;
 end
 
+// Send LSB first
 assign dat_i = (instr_v==SENDIV) ? iv_r[0] : ((instr_v==SENDKEY) ? key_r[0] : dat_in_s[0]);
+// Send MSB first
+//assign dat_i = (instr_v==SENDIV) ? iv_r[0] : ((instr_v==SENDKEY) ? key_r[0] : dat_in_s[31]);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Stimulus process
@@ -299,7 +304,9 @@ always @(posedge clk_i or negedge n_rst_i) begin
         /* Reset registers driven here */
         dat_in_s <= 0;
         dat_out_s <= 0;
-        init_i <= 0;
+        //dat_intest_s <= 0;
+        init_i <= 1'b0;
+        inutil_flag <= 1'b0;
         end_i <= 0;   
         instr_v <= 0;
         dat_cntr_v <= 0;
@@ -316,7 +323,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
                 iv_r[79:0] <= get_key_iv("trivium_ref_in.txt", "iv", cur_test_v);
 
                 instr_v <= WAIT1; // Wait for cipher_engine 1 cycle
-                init_i <= 1;
+                init_i <= 1'b1;
             end
 	    WAIT1: begin // Instruction 1: Cipher engine needs one cycle to wake-up
                 instr_v <= SENDIV;
@@ -353,37 +360,44 @@ always @(posedge clk_i or negedge n_rst_i) begin
                 init_i <= 1'b0; // release init signal
                 if (!busy_o) begin// check busy signal in cipher
                     instr_v <= SEND_DAT;
+                    //instr_v <= WAIT2;
                     dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
                     dat_outref_s <= get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v);
                     bitcntr_v <= 0;
                 end
             end
 
-	    /*WAIT2: begin // Instruction 9: wait one cycle before shifting
+	    /* WAIT2: begin // Instruction 9: wait one cycle before shifting
 		instr_v <= SEND_DAT;
-                	dat_out_s <= {dat_o, dat_out_s[31:1]};
-	    end */
+                	//dat_out_s <= {dat_o, dat_out_s[31:1]};
+	    end */ 
          
-            SEND_DAT: begin    /* Instruction 5: Present a 32-bit value to encrypt */
+            SEND_DAT: begin    /* Instruction 5: Present a 32-bit value to encrypt MSB first */
 			init_i <= 1'b1;
-		if (init_i) begin
+			if (init_i)
+				inutil_flag <= 1'b1; // add extra cycle for TB compatibility
+		if (init_i && inutil_flag) begin
                 	if (bitcntr_v != 32 ) begin // count 32 bits
-                    dat_in_s <= {1'b0, dat_in_s[31:1]};
-                	dat_out_s <= {dat_o, dat_out_s[31:1]};
+                    dat_in_s <= {1'b0, dat_in_s[31:1]}; //SR for LSB first
+                    //dat_in_s <= {dat_in_s[30:0],1'b0}; //SL for MSB first
+                	dat_out_s <= {dat_o, dat_out_s[31:1]}; //SR for LSB first
+                	//dat_out_s <= {dat_out_s[30:0],dat_o}; //SL for MSB first
+                	//dat_intest_s <= {dat_in_s[0], dat_intest_s[31:1]};
                     bitcntr_v <= bitcntr_v + 1;
                 end
                 else begin
                 	bitcntr_v <= 0;
+			init_i <= 1'b0;
+			dat_cntr_v <= dat_cntr_v + 1;
                     if (dat_out_s != dat_outref_s)
                 		instr_v <= KAPUTT; // Finish error state
                 	else begin
 	                	if (dat_cntr_v < get_num_words("trivium_ref_in.txt", dat_cntr_v, cur_test_v) - 1) begin
-    	                    dat_cntr_v <= CHECK_FINISH;
 		                    dat_in_s <= get_word("trivium_ref_in.txt", dat_cntr_v, cur_test_v);
         		            dat_outref_s <= get_word("trivium_ref_out.txt", dat_cntr_v, cur_test_v);
         	            end
         	            else begin
-        	            	instr_v <= 7; //Check completion state
+        	            	instr_v <= CHECK_FINISH; //Check completion state
         	            end
                 	end
                 end
