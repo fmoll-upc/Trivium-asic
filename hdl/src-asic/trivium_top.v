@@ -43,7 +43,7 @@ wire		[79:0]	iv_dat_s;		/* iv value */
 //////////////////////////////////////////////////////////////////////////////////
 // Local parameter definitions
 //////////////////////////////////////////////////////////////////////////////////
-parameter   IDLE_e = 3'b000, 
+localparam   IDLE_e = 3'b000, 
             RECV_INI_e = 3'b001, 
             LOAD_KEYIV_e = 3'b010, 
             WARMUP_e = 3'b011, 
@@ -87,70 +87,72 @@ always @(*) begin
     case (cur_state_r)
         IDLE_e: /* Wait until the user initializes the module */
             if (get_dat_i)
-                next_state_s = #5 RECV_INI_e;
+                next_state_s <=   RECV_INI_e;
             else
-                next_state_s = #5 IDLE_e;
+                next_state_s <=   IDLE_e;
         
         RECV_INI_e: begin /* key and iv received in input SR key_iv */
         	if(ld_keys_i) begin
-        		next_state_s = #5 LOAD_KEYIV_e;
+        		next_state_s <=   LOAD_KEYIV_e;
 			end
 			else
-				next_state_s = cur_state_r;
+				next_state_s <=   cur_state_r;
         	/*else begin
 				if(!get_dat_i) begin
-					next_state_s = #5 IDLE_e;
+					next_state_s =   IDLE_e;
 				end
 				else begin
-        			next_state_s = #5 RECV_INI_e;
+        			next_state_s =   RECV_INI_e;
 				end
 			end*/
 		end
         		
 		LOAD_KEYIV_e: begin/* load key and iv in cipher registers */
-			next_state_s = #5 WARMUP_e;
+			next_state_s <=   WARMUP_e;
 		end
 	            
         WARMUP_e: /* Warm up the cipher */
             if (cntr_r == 1151)
-                next_state_s = #5 WAIT_e;
+                next_state_s <=   WAIT_e;
             else
-                next_state_s = #5 WARMUP_e;
+                next_state_s <=   WARMUP_e;
 
         WAIT_e: /* stop cipher shift */
             if (get_dat_i)
-                next_state_s = #5 PROC_e;
+                next_state_s <=   PROC_e;
 			else
-				next_state_s = cur_state_r;
-            /*else
-				if (ld_keys_i)
-					next_state_s = #5 LOAD_KEYIV_e;
-				else 
-                	next_state_s = #5 WAIT_e;*/
+				if(end_i)
+					next_state_s <= IDLE_e;
+				else
+					next_state_s <=   cur_state_r;
                         
         PROC_e: /* Generate cipher stream */
             if (!get_dat_i)
-                next_state_s = #5 WAIT_e;
+                next_state_s <=   WAIT_e;
 			else
-				next_state_s = #5 PROC_e;
+				next_state_s <=   PROC_e;
             
-        default:
-            next_state_s = cur_state_r;
     endcase
 end
 
 //////////////////////////////////////////////////////////////////////////////////
 // State save and output logic of the FSM
 //////////////////////////////////////////////////////////////////////////////////
+
 always @(posedge clk_i or negedge n_rst_i) begin
     if (!n_rst_i) begin
-        /* Reset registers driven here */
         cur_state_r <= IDLE_e;
+    end
+    else begin
+        cur_state_r <= next_state_s;
+	end
+end
+
+always @(posedge clk_i or negedge n_rst_i) begin
+    if (!n_rst_i) begin
 		cntr_r <= 11'b0;
     end
     else begin
-        /* State save logic */
-        cur_state_r <= next_state_s;
 		if(cur_state_r == WARMUP_e) begin
 			cntr_r <= cntr_r + 11'b1;
 		end
@@ -199,7 +201,7 @@ end
             end
                   
             PROC_e: begin
-				cphr_en_r <= 1'b1;
+				cphr_en_r <= get_dat_i;
 				ce_keyiv_r <= 1'b0;
 				ld_init_r <= 1'b0;
 				ready_o <= 1'b1;

@@ -237,7 +237,7 @@ wire            end_i;
 wire     		dat_o;
 wire			ready_o;
 
-parameter 	RESET = 0,
+localparam 	RESET = 0,
 			GETKEY=1, 
 			SENDIV=2, 
 			SENDKEY=3, 
@@ -313,64 +313,65 @@ end
 always @(*) begin
 	case(instr_v)
 		RESET: begin
-			next_instr = GETKEY;
+			next_instr <= GETKEY;
 		end
 
 		GETKEY : begin
-			next_instr = SENDKEY;
+			next_instr <= SENDKEY;
 		end
 
 		SENDKEY: begin
 			if (bitcntr_v ==79)
-				next_instr = SENDIV;
+				next_instr <= SENDIV;
 			else
-				next_instr = SENDKEY;
+				next_instr <= SENDKEY;
 		end
 
 		SENDIV: begin
 			if (bitcntr_v ==79)
-				next_instr = LOADKEYS;
+				next_instr <= LOADKEYS;
 			else
-				next_instr = SENDIV;
+				next_instr <= SENDIV;
 		end
 
 		LOADKEYS: begin
-			next_instr = WAIT_INIT;
+			next_instr <= WAIT_INIT;
 		end
 
 		WAIT_INIT: begin
 			if(ready_o)
-				next_instr = GETWORD;
+				next_instr <= GETWORD;
 			else
-				next_instr = WAIT_INIT;
+				next_instr <= WAIT_INIT;
 		end
 
 		GETWORD: begin
-			next_instr = SENDWORD;
+			next_instr <= SENDWORD;
 		end
 
 		SENDWORD: begin
 			if (bitcntr_v ==31)
-				next_instr = COMPARE;
+				next_instr <= COMPARE;
 			else
-				next_instr = SENDWORD;
+				next_instr <= SENDWORD;
 		end
+
 
 		COMPARE: begin
             if (dat_out_s != dat_outref_s)
-				next_instr = KAPUTT;
+				next_instr <= KAPUTT;
 			else
-				if (dat_cntr_v < get_num_words("trivium_ref_in.txt", dat_cntr_v, cur_test_v) - 1) 
-					next_instr = GETWORD;
+				if (dat_cntr_v != get_num_words("trivium_ref_in.txt", dat_cntr_v, cur_test_v) - 1) 
+					next_instr <= GETWORD;
 				else
-					next_instr = CHECK_FINISH;
+					next_instr <= CHECK_FINISH;
 		end
  
 		CHECK_FINISH: begin
-            if (cur_test_v < get_num_tests("trivium_ref_in.txt") - 1)
-				next_instr = GETKEY;
+            if (cur_test_v != get_num_tests("trivium_ref_in.txt") - 1)
+				next_instr <= GETKEY;
 			else
-				next_instr = HAPPY;
+				next_instr <= HAPPY;
 		end
  
 	/*	KAPUTT:begin
@@ -380,7 +381,7 @@ always @(*) begin
 		end */
 		
 		default:
-			next_instr = instr_v;
+			next_instr <= instr_v;
 	endcase
 end 
 		
@@ -414,7 +415,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
                		key_r <= {1'b0,key_r[79:1]};
 				end
 				else
-					bitcntr_v = 0;
+					bitcntr_v <= 0;
 			end
 
 			SENDIV: begin
@@ -423,7 +424,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
                		iv_r <= {1'b0,iv_r[79:1]};
 				end
 				else
-					bitcntr_v = 0;
+					bitcntr_v <= 0;
 			end
 
 			GETWORD: begin
@@ -432,13 +433,13 @@ always @(posedge clk_i or negedge n_rst_i) begin
 			end
 			
 			SENDWORD: begin
-				if (bitcntr_v !=31) begin
-					bitcntr_v = bitcntr_v + 1;
 					dat_in_s <= {1'b0, dat_in_s[31:1]}; //SR for LSB first
 					dat_out_s <= {dat_o, dat_out_s[31:1]}; //SR for LSB first
+				if (bitcntr_v !=31) begin
+					bitcntr_v <= bitcntr_v + 1;
 				end
 				else
-					bitcntr_v = 0;
+					bitcntr_v <= 0;
 			end
 
 			COMPARE: begin
@@ -446,6 +447,7 @@ always @(posedge clk_i or negedge n_rst_i) begin
 			end
 
 			CHECK_FINISH: begin
+				dat_cntr_v <= 0;
 				cur_test_v <= cur_test_v + 1;
 			end
 			
@@ -478,8 +480,6 @@ assign load_keys_i = ((instr_v==SENDIV) && (bitcntr_v ==79));
 assign end_i = ((instr_v==CHECK_FINISH));
 // Send LSB first
 assign dat_i = (instr_v==SENDIV) ? iv_r[0] : ((instr_v==SENDKEY) ? key_r[0] : dat_in_s[0]);
-// Send MSB first
-//assign dat_i = (instr_v==SENDIV) ? iv_r[0] : ((instr_v==SENDKEY) ? key_r[0] : dat_in_s[31]);
 
       
 endmodule
