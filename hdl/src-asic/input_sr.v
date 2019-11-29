@@ -36,7 +36,7 @@ reg       		[(REG_SZ - 1):0]    dat_r;      /* Shift register output */
 //////////////////////////////////////////////////////////////////////////////////
 always @(posedge clk_i or negedge n_rst_i) begin
     if (!n_rst_i)
-        dat_r <= 0;
+        dat_r <= {REG_SZ{1'b0}};
     else begin
         if (ce_i) begin
             /* Shift contents of register */

@@ -473,8 +473,8 @@ end
 // Output logic
 // get_dat_i, ld_keys_i, end_i, dat_i
 
-assign get_dat_i = ((instr_v==SENDKEY) | (instr_v==SENDIV) | (instr_v==SENDWORD) );
-assign ld_keys_i = ((instr_v==SENDIV) & (bitcntr_v ==79));
+assign get_dat_i = ((instr_v==SENDKEY) || (instr_v==SENDIV) || (instr_v==SENDWORD) || (instr_v==LOADKEYS) || (instr_v == GETWORD));
+assign load_keys_i = ((instr_v==SENDIV) && (bitcntr_v ==79));
 assign end_i = ((instr_v==CHECK_FINISH));
 // Send LSB first
 assign dat_i = (instr_v==SENDIV) ? iv_r[0] : ((instr_v==SENDKEY) ? key_r[0] : dat_in_s[0]);
